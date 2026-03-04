@@ -1,0 +1,111 @@
+{% extends 'timeoff/base.html' %}
+
+{% block content %}
+<section class="panel header-panel">
+    <div>
+        <h1>User Management</h1>
+        <p>Use the side menu to switch between users, creation, and quick update tools.</p>
+    </div>
+    <div class="badge-row">
+        <span class="metric">Total Users: <strong>{{ total_users }}</strong></span>
+        <span class="metric">Carryover rule: <strong>{{ previous_year }} usable until {{ carryover_deadline|date:"Y-m-d" }}</strong></span>
+    </div>
+</section>
+
+<section class="um-workspace">
+    <aside class="panel um-sidebar">
+        <div class="um-sidebar-title">
+            <span class="um-burger" aria-hidden="true"></span>
+            Functions
+        </div>
+        <nav class="um-nav">
+            <a href="{% url 'user_management' %}?panel=users" class="um-nav-link {% if active_panel == 'users' %}active{% endif %}">Users</a>
+            <a href="{% url 'user_management' %}?panel=create" class="um-nav-link {% if active_panel == 'create' %}active{% endif %}">Create User</a>
+            <a href="{% url 'user_management' %}?panel=quick-update" class="um-nav-link {% if active_panel == 'quick-update' %}active{% endif %}">Quick Update</a>
+        </nav>
+    </aside>
+
+    <div class="stack-col">
+        {% if active_panel == 'users' %}
+            <section class="panel">
+                <h2>Users</h2>
+                <p class="panel-subtitle">Click a username to open the dedicated edit page.</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Country</th>
+                            <th>Allowance</th>
+                            <th>Remaining {{ quota_year }}</th>
+                            <th>Carryover {{ previous_year }}</th>
+                            <th>Total Available</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in user_rows %}
+                            <tr>
+                                <td><a href="{% url 'user_edit' row.user.id %}" class="table-link">{{ row.user.username }}</a></td>
+                                <td>{% if row.user.email %}{{ row.user.email }}{% else %}-{% endif %}</td>
+                                <td>{{ row.user.profile.get_role_display }}</td>
+                                <td>{% if row.user.profile.country %}{{ row.user.profile.country.code }}{% else %}-{% endif %}</td>
+                                <td>{{ row.allowance }}</td>
+                                <td>{{ row.current_left }}</td>
+                                <td>{{ row.carryover_left }}</td>
+                                <td><strong>{{ row.total_left }}</strong></td>
+                            </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8">No users available.</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        {% elif active_panel == 'create' %}
+            <section class="panel">
+                <h2>Create User</h2>
+                <form method="post" action="{% url 'create_user' %}" class="stack-form">
+                    {% csrf_token %}
+                    {{ create_user_form.as_p }}
+                    <button type="submit">Create User</button>
+                </form>
+            </section>
+        {% else %}
+            <section class="panel">
+                <h2>Quick Update</h2>
+                <p class="panel-subtitle">Carryover is automatic. Select user and fields load automatically.</p>
+                <form method="post" action="{% url 'update_employee_profile' %}" class="stack-form" id="quick-update-form">
+                    {% csrf_token %}
+                    {{ profile_form.as_p }}
+                    <button type="submit">Save Employee Settings</button>
+                </form>
+            </section>
+        {% endif %}
+    </div>
+</section>
+{% if active_panel == 'quick-update' %}
+<script>
+    (function () {
+        const userSelect = document.getElementById("id_user");
+        if (!userSelect) {
+            return;
+        }
+        userSelect.addEventListener("change", function () {
+            const userId = userSelect.value;
+            const params = new URLSearchParams(window.location.search);
+            params.set("panel", "quick-update");
+            if (userId) {
+                params.set("user", userId);
+            } else {
+                params.delete("user");
+            }
+            window.location.search = params.toString();
+        });
+    })();
+</script>
+{% endif %}
+{% endblock %}

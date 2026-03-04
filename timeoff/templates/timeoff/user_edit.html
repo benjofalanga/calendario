@@ -1,0 +1,26 @@
+{% extends 'timeoff/base.html' %}
+
+{% block content %}
+<section class="panel header-panel">
+    <div>
+        <h1>Edit User</h1>
+        <p>Manage profile settings for <strong>{{ selected_user.username }}</strong>.</p>
+    </div>
+    <div class="badge-row">
+        <a href="{% url 'user_management' %}?panel=users" class="button-link">Back to Users</a>
+    </div>
+</section>
+
+<section class="panel">
+    <p class="panel-subtitle">Carryover is calculated automatically from unused previous-year allowance.</p>
+    <form method="post" class="stack-form">
+        {% csrf_token %}
+        <p>
+            <label>Username</label>
+            <input type="text" value="{{ selected_user.username }}" disabled>
+        </p>
+        {{ edit_form.as_p }}
+        <button type="submit">Save Changes</button>
+    </form>
+</section>
+{% endblock %}

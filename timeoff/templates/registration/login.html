@@ -1,0 +1,14 @@
+{% extends 'timeoff/base.html' %}
+
+{% block content %}
+<section class="auth-card">
+    <h1>Sign In</h1>
+    <p>Access Calendario to request and manage days off.</p>
+    <form method="post" class="auth-form">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Sign In</button>
+    </form>
+    <p><a href="{% url 'password_reset' %}">Forgot your password?</a></p>
+</section>
+{% endblock %}

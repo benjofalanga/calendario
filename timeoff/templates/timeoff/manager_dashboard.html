@@ -1,0 +1,347 @@
+{% extends 'timeoff/base.html' %}
+{% load static %}
+
+{% block content %}
+<section class="panel header-panel">
+    <div>
+        <h1>Admin Dashboard</h1>
+        <p>Review requests, approve/reject days off, and manage countries/holidays.</p>
+    </div>
+    <div class="badge-row">
+        <span class="metric">Pending: <strong>{{ pending_count }}</strong></span>
+        <span class="metric">Approved: <strong>{{ approved_count }}</strong></span>
+        <span class="metric">Rejected: <strong>{{ rejected_count }}</strong></span>
+        <span class="metric">Revoke Requests: <strong>{{ revoke_requests_count }}</strong></span>
+    </div>
+</section>
+
+{% if active_panel == 'requests' %}
+<section class="panel filter-panel">
+    <div class="toolbar">
+        <div class="toolbar-form month-nav">
+            <button type="button" id="admin-prev-month" class="secondary-btn nav-btn">← Prev</button>
+            <h2 id="admin-current-month-title" class="calendar-month-title">{{ month_name }} {{ year }}</h2>
+            <button type="button" id="admin-next-month" class="secondary-btn nav-btn">Next →</button>
+        </div>
+    </div>
+    <form method="get" class="filter-grid" id="admin-filter-form">
+        <input type="hidden" name="panel" value="{{ active_panel }}">
+        <label>
+            Country
+            <select name="country">
+                <option value="">All</option>
+                {% for country in countries %}
+                    <option value="{{ country.id }}" {% if selected_country_id == country.id %}selected{% endif %}>
+                        {{ country.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
+            Employee
+            <select name="employee">
+                <option value="">All</option>
+                {% for employee in employees %}
+                    <option value="{{ employee.id }}" {% if selected_employee_id == employee.id %}selected{% endif %}>
+                        {{ employee.username }}
+                    </option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
+            Status
+            <select name="status">
+                <option value="">All</option>
+                <option value="pending" {% if selected_status == 'pending' %}selected{% endif %}>Pending</option>
+                <option value="approved" {% if selected_status == 'approved' %}selected{% endif %}>Approved</option>
+                <option value="rejected" {% if selected_status == 'rejected' %}selected{% endif %}>Rejected</option>
+            </select>
+        </label>
+        <label>
+            Month
+            <select name="month" id="admin-month-select">
+                {% for month_number, month_name in month_options %}
+                    <option value="{{ month_number }}" {% if month == month_number %}selected{% endif %}>{{ month_name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
+            Year
+            <input type="number" name="year" id="admin-year-input" min="2000" max="2100" value="{{ year }}">
+        </label>
+        <button type="submit">Apply Filters</button>
+    </form>
+</section>
+{% endif %}
+
+<section class="layout-grid">
+    <div class="stack-col">
+        {% if active_panel == 'requests' %}
+            <section class="panel calendar-panel">
+                <h2>Monthly Overview</h2>
+                <div id="manager-calendar"
+                     data-month="{{ month }}"
+                     data-year="{{ year }}"
+                     data-can-select-mode="{% if can_select_mode %}1{% else %}0{% endif %}"
+                     data-selected-employee-id="{% if selected_employee_id %}{{ selected_employee_id }}{% endif %}"
+                     data-approve-template="{% url 'approve_request' 0 %}"
+                     data-reject-template="{% url 'reject_request' 0 %}"
+                     data-revoke-approved-template="{% url 'revoke_approved_request' 0 %}"
+                     data-approve-revoke-template="{% url 'approve_revoke_request' 0 %}"
+                     data-reject-revoke-template="{% url 'reject_revoke_request' 0 %}">
+                    <div class="calendar-weekdays">
+                        <span>Mon</span>
+                        <span>Tue</span>
+                        <span>Wed</span>
+                        <span>Thu</span>
+                        <span>Fri</span>
+                        <span>Sat</span>
+                        <span>Sun</span>
+                    </div>
+                    <div id="manager-calendar-grid" class="calendar-grid"></div>
+                </div>
+                <div class="legend">
+                    <span><i class="dot dot-approved"></i>Approved requests</span>
+                    <span><i class="dot dot-pending"></i>Pending requests</span>
+                    <span><i class="dot dot-rejected"></i>Rejected requests</span>
+                    <span><i class="dot dot-holiday"></i>Public holidays</span>
+                    <span><i class="dot dot-weekend"></i>Weekend</span>
+                </div>
+
+                <div class="manage-toolbar">
+                    <button type="button" id="admin-toggle-select-mode" class="secondary-btn" {% if not can_select_mode %}disabled{% endif %}>Select Mode</button>
+                    <span id="admin-select-summary" class="selection-dates">
+                        {% if can_select_mode %}Select mode off{% else %}Select mode requires a single employee filter{% endif %}
+                    </span>
+                </div>
+
+                <div id="admin-manage-actions" class="manage-actions hidden">
+                    <form method="post" action="{% url 'bulk_review_requests' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="approve_pending">
+                        <input type="hidden" name="employee_id" value="{% if selected_employee_id %}{{ selected_employee_id }}{% endif %}">
+                        <input type="hidden" name="request_ids" id="admin-bulk-request-ids-approve" value="">
+                        <input type="hidden" name="checked_dates" id="admin-bulk-checked-dates-approve" value="">
+                        <input type="hidden" name="next" class="admin-bulk-next-input" value="{{ request.get_full_path }}">
+                        <button type="submit" id="admin-bulk-approve" class="approve-btn" disabled>Approve Pending</button>
+                    </form>
+                    <form method="post" action="{% url 'bulk_review_requests' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="reject_pending">
+                        <input type="hidden" name="employee_id" value="{% if selected_employee_id %}{{ selected_employee_id }}{% endif %}">
+                        <input type="hidden" name="request_ids" id="admin-bulk-request-ids-reject" value="">
+                        <input type="hidden" name="checked_dates" id="admin-bulk-checked-dates-reject" value="">
+                        <input type="hidden" name="next" class="admin-bulk-next-input" value="{{ request.get_full_path }}">
+                        <button type="submit" id="admin-bulk-reject" class="reject-btn" disabled>Reject Pending</button>
+                    </form>
+                    <form method="post" action="{% url 'bulk_review_requests' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="approve_revoke">
+                        <input type="hidden" name="employee_id" value="{% if selected_employee_id %}{{ selected_employee_id }}{% endif %}">
+                        <input type="hidden" name="request_ids" id="admin-bulk-request-ids-approve-revoke" value="">
+                        <input type="hidden" name="checked_dates" id="admin-bulk-checked-dates-approve-revoke" value="">
+                        <input type="hidden" name="next" class="admin-bulk-next-input" value="{{ request.get_full_path }}">
+                        <button type="submit" id="admin-bulk-approve-revoke" class="approve-btn" disabled>Approve Revoke</button>
+                    </form>
+                    <form method="post" action="{% url 'bulk_review_requests' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="revoke_approved">
+                        <input type="hidden" name="employee_id" value="{% if selected_employee_id %}{{ selected_employee_id }}{% endif %}">
+                        <input type="hidden" name="request_ids" id="admin-bulk-request-ids-revoke-approved" value="">
+                        <input type="hidden" name="checked_dates" id="admin-bulk-checked-dates-revoke-approved" value="">
+                        <input type="hidden" name="next" class="admin-bulk-next-input" value="{{ request.get_full_path }}">
+                        <button type="submit" id="admin-bulk-revoke-approved" class="reject-btn" disabled>Revoke Approved</button>
+                    </form>
+                    <form method="post" action="{% url 'bulk_review_requests' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="reject_revoke">
+                        <input type="hidden" name="employee_id" value="{% if selected_employee_id %}{{ selected_employee_id }}{% endif %}">
+                        <input type="hidden" name="request_ids" id="admin-bulk-request-ids-reject-revoke" value="">
+                        <input type="hidden" name="checked_dates" id="admin-bulk-checked-dates-reject-revoke" value="">
+                        <input type="hidden" name="next" class="admin-bulk-next-input" value="{{ request.get_full_path }}">
+                        <button type="submit" id="admin-bulk-reject-revoke" class="secondary-btn" disabled>Keep Approved</button>
+                    </form>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h2>Requests</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Employee</th>
+                            <th>Country</th>
+                            <th>Status</th>
+                            <th>Review</th>
+                            <th>Action</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for req in requests %}
+                            <tr>
+                                <td>{{ req.date }}</td>
+                                <td>{{ req.user.username }}</td>
+                                <td>{% if req.country %}{{ req.country.code }}{% else %}-{% endif %}</td>
+                                <td>
+                                    <span class="status-chip status-{{ req.status }}">{{ req.get_status_display }}</span>
+                                    {% if req.status == 'approved' and req.revoke_requested %}
+                                        <br><span class="cell-note">Revoke requested</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if req.reviewed_by %}
+                                        {{ req.reviewed_by.username }}<br>
+                                        {{ req.reviewed_at|date:'Y-m-d H:i' }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if req.status == 'pending' %}
+                                        <div class="action-wrap">
+                                            <form method="post" action="{% url 'approve_request' req.id %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                <button type="submit" class="approve-btn">Approve</button>
+                                            </form>
+                                            <form method="post" action="{% url 'reject_request' req.id %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                <input type="text" name="note" placeholder="Optional note">
+                                                <button type="submit" class="reject-btn">Reject</button>
+                                            </form>
+                                        </div>
+                                    {% elif req.status == 'approved' and req.revoke_requested %}
+                                        <div class="action-wrap">
+                                            <form method="post" action="{% url 'approve_revoke_request' req.id %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                <button type="submit" class="approve-btn">Approve Revoke</button>
+                                            </form>
+                                            <form method="post" action="{% url 'reject_revoke_request' req.id %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                <input type="text" name="note" placeholder="Optional note">
+                                                <button type="submit" class="reject-btn">Keep Approved</button>
+                                            </form>
+                                            <form method="post" action="{% url 'revoke_approved_request' req.id %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                <button type="submit" class="reject-btn">Revoke Approved</button>
+                                            </form>
+                                        </div>
+                                    {% elif req.status == 'approved' %}
+                                        <form method="post" action="{% url 'revoke_approved_request' req.id %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <button type="submit" class="reject-btn">Revoke Approved</button>
+                                        </form>
+                                    {% else %}
+                                        {% if req.note %}
+                                            {{ req.note }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6">No requests found for current filters.</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        {% elif active_panel == 'add-country' %}
+            <section class="panel">
+                <h2>Add Country</h2>
+                <p class="panel-subtitle">Create a new country used for employee assignment and public holidays.</p>
+                <form method="post" action="{% url 'add_country' %}" class="stack-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    {{ country_form.as_p }}
+                    <button type="submit">Create Country</button>
+                </form>
+            </section>
+        {% elif active_panel == 'add-holiday' %}
+            <section class="panel">
+                <h2>Add Public Holiday</h2>
+                <p class="panel-subtitle">Create official holidays by country so calendars can lock those dates.</p>
+                <form method="post" action="{% url 'add_holiday' %}" class="stack-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    {{ holiday_form.as_p }}
+                    <button type="submit">Create Holiday</button>
+                </form>
+            </section>
+        {% elif active_panel == 'revoke-holiday' %}
+            <section class="panel">
+                <h2>Revoke Public Holiday</h2>
+                <p class="panel-subtitle">Remove holiday entries that should no longer apply.</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Country</th>
+                            <th>Name</th>
+                            <th>Action</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for holiday in managed_holidays %}
+                            <tr>
+                                <td>{{ holiday.date }}</td>
+                                <td>{{ holiday.country.code }}</td>
+                                <td>{{ holiday.name }}</td>
+                                <td>
+                                    <form method="post" action="{% url 'delete_holiday' holiday.id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="submit" class="reject-btn tiny-btn">Revoke</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="4">No holidays available.</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        {% endif %}
+    </div>
+
+    <div class="stack-col compact admin-tools-col">
+        <section class="panel um-sidebar">
+            <div class="um-sidebar-title">
+                <span class="um-burger"></span>
+                <span>Admin Tools</span>
+            </div>
+            <nav class="um-nav">
+                <a class="um-nav-link {% if active_panel == 'requests' %}active{% endif %}" href="?panel=requests&country={{ selected_country_id|default_if_none:'' }}&employee={{ selected_employee_id|default_if_none:'' }}&status={{ selected_status }}&month={{ month }}&year={{ year }}">Requests</a>
+                <a class="um-nav-link {% if active_panel == 'add-country' %}active{% endif %}" href="?panel=add-country&country={{ selected_country_id|default_if_none:'' }}&employee={{ selected_employee_id|default_if_none:'' }}&status={{ selected_status }}&month={{ month }}&year={{ year }}">Add Country</a>
+                <a class="um-nav-link {% if active_panel == 'add-holiday' %}active{% endif %}" href="?panel=add-holiday&country={{ selected_country_id|default_if_none:'' }}&employee={{ selected_employee_id|default_if_none:'' }}&status={{ selected_status }}&month={{ month }}&year={{ year }}">Add Holiday</a>
+                <a class="um-nav-link {% if active_panel == 'revoke-holiday' %}active{% endif %}" href="?panel=revoke-holiday&country={{ selected_country_id|default_if_none:'' }}&employee={{ selected_employee_id|default_if_none:'' }}&status={{ selected_status }}&month={{ month }}&year={{ year }}">Revoke Holiday</a>
+            </nav>
+        </section>
+        {% if active_panel != 'requests' %}
+            <section class="panel">
+                <h2>Tool Workspace</h2>
+                <p class="panel-subtitle">You are in focused tool mode. Calendar is hidden for a cleaner view.</p>
+                <a href="?panel=requests&country={{ selected_country_id|default_if_none:'' }}&employee={{ selected_employee_id|default_if_none:'' }}&status={{ selected_status }}&month={{ month }}&year={{ year }}" class="button-link">Back to Requests</a>
+            </section>
+        {% endif %}
+    </div>
+</section>
+
+<script id="manager-employee-events" type="application/json">{{ employee_events_json|safe }}</script>
+<script id="manager-holiday-events" type="application/json">{{ holiday_events_json|safe }}</script>
+<script src="{% static 'timeoff/js/manager_dashboard.js' %}"></script>
+{% endblock %}

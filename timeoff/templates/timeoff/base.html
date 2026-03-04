@@ -1,0 +1,40 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Calendario</title>
+    <link rel="stylesheet" href="{% static 'timeoff/css/styles.css' %}">
+</head>
+<body>
+<div class="background-layer"></div>
+<header class="topbar">
+    <a class="brand" href="{% url 'home' %}">Calendario</a>
+    {% if user.is_authenticated %}
+        <nav class="topbar-nav">
+            <a href="{% url 'employee_calendar' %}">My Calendar</a>
+            {% if is_manager %}
+                <a href="{% url 'manager_dashboard' %}">Admin Dashboard</a>
+                <a href="{% url 'user_management' %}">User Management</a>
+            {% endif %}
+            <a href="{% url 'password_change' %}">Change Password</a>
+            <form method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit" class="link-btn">Log Out</button>
+            </form>
+        </nav>
+    {% endif %}
+</header>
+<main class="page-shell">
+    {% if messages %}
+        <section class="flash-wrap">
+            {% for message in messages %}
+                <div class="flash flash-{{ message.tags|default:'info' }}">{{ message }}</div>
+            {% endfor %}
+        </section>
+    {% endif %}
+    {% block content %}{% endblock %}
+</main>
+</body>
+</html>

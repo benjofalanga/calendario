@@ -1,0 +1,4 @@
+# Optional LDAP dependencies
+# Keep this separate so base installs stay lightweight.
+django-auth-ldap>=4.8,<5.0
+python-ldap>=3.4,<4.0

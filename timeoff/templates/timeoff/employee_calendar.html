@@ -1,0 +1,167 @@
+{% extends 'timeoff/base.html' %}
+{% load static %}
+
+{% block content %}
+<section class="panel header-panel">
+    <div>
+        <h1>My Days Off</h1>
+        <p>Select dates and submit a request. Approval is handled by an admin.</p>
+        {% if not country %}
+            <p class="panel-subtitle">No country is assigned to your account yet, so public holidays are hidden. Ask an admin to set your country.</p>
+        {% endif %}
+    </div>
+    <div class="badge-row">
+        <span class="metric">Country: <strong>{% if country %}{{ country.name }}{% else %}Not assigned{% endif %}</strong></span>
+        <span class="metric">Allowance: <strong>{{ allowance }}</strong></span>
+        <span class="metric">Unused carryover from {{ previous_year }}: <strong>{{ carryover_left }}</strong></span>
+        <span class="metric">Carryover usable now: <strong>{{ carryover_available_now }}</strong></span>
+        <span class="metric">Left from {{ year }}: <strong>{{ current_year_left }}</strong></span>
+        <span class="metric">Total available now: <strong>{{ total_remaining }}</strong></span>
+        <span class="metric">Carryover deadline: <strong>{{ carryover_deadline|date:"Y-m-d" }}</strong></span>
+        {% if carryover_expired %}
+            <span class="metric metric-expired">Carryover expired on <strong>{{ carryover_deadline|date:"Y-m-d" }}</strong></span>
+        {% endif %}
+        <span class="metric">Public holidays this month: <strong id="month-holiday-count">{% if country %}{{ month_holiday_count }}{% else %}Assign country{% endif %}</strong></span>
+        <span class="metric">Approved ({{ year }}): <strong>{{ approved_this_year }}</strong></span>
+        <span class="metric">Pending ({{ year }}): <strong>{{ pending_this_year }}</strong></span>
+    </div>
+</section>
+
+<section class="panel calendar-panel">
+    <div class="toolbar">
+        <div class="toolbar-form month-nav">
+            <button type="button" id="prev-month" class="secondary-btn nav-btn">← Prev</button>
+            <h2 id="current-month-title" class="calendar-month-title"></h2>
+            <button type="button" id="next-month" class="secondary-btn nav-btn">Next →</button>
+        </div>
+        <form method="get" class="toolbar-form">
+            <label>
+                Month
+                <select name="month" id="month-select">
+                    {% for month_number, month_name in month_options %}
+                        <option value="{{ month_number }}" {% if month == month_number %}selected{% endif %}>{{ month_name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Year
+                <input type="number" name="year" id="year-input" min="2000" max="2100" value="{{ year }}">
+            </label>
+            <input type="hidden" name="selected_dates" id="navigation-selected-dates" value="">
+            <button type="submit" id="jump-month">Go</button>
+        </form>
+    </div>
+
+    <div id="employee-calendar"
+         data-month="{{ month }}"
+         data-year="{{ year }}"
+         data-user-id="{{ user.id }}"
+         data-has-country="{% if country %}1{% else %}0{% endif %}"
+         data-revoke-template="{% url 'revoke_own_request' 0 %}"
+         data-request-revoke-template="{% url 'request_revoke_approved' 0 %}">
+        <div class="calendar-weekdays">
+            <span>Mon</span>
+            <span>Tue</span>
+            <span>Wed</span>
+            <span>Thu</span>
+            <span>Fri</span>
+            <span>Sat</span>
+            <span>Sun</span>
+        </div>
+        <div id="employee-calendar-grid" class="calendar-grid"></div>
+    </div>
+
+    <div class="legend">
+        <span><i class="dot dot-approved"></i>Approved (hover to request revoke)</span>
+        <span><i class="dot dot-pending"></i>Pending (hover to revoke)</span>
+        <span><i class="dot dot-rejected"></i>Rejected (click to re-request)</span>
+        <span><i class="dot dot-holiday"></i>Public holiday</span>
+        <span><i class="dot dot-weekend"></i>Weekend (locked)</span>
+        <span><i class="dot dot-selected"></i>Selected now</span>
+    </div>
+
+    <div class="selection-summary">
+        <span class="metric">Selected: <strong id="selected-count-value">0</strong></span>
+        <span id="selected-dates-text" class="selection-dates">No dates selected</span>
+    </div>
+
+    <div class="manage-toolbar">
+        <button type="button" id="toggle-manage-mode" class="secondary-btn">Select Mode</button>
+        <span id="manage-summary" class="selection-dates">Select mode off</span>
+    </div>
+
+    <div id="manage-actions" class="manage-actions hidden">
+        <form method="post" action="{% url 'bulk_manage_own_requests' %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="request_approval">
+            <input type="hidden" name="checked_dates" id="bulk-checked-dates-request" value="">
+            <input type="hidden" name="next" class="bulk-next-input" value="{{ request.get_full_path }}">
+            <button type="submit" id="bulk-request-approval" disabled>Request Approval</button>
+        </form>
+        <form method="post" action="{% url 'bulk_manage_own_requests' %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="revoke_pending">
+            <input type="hidden" name="request_ids" id="bulk-request-ids-pending" value="">
+            <input type="hidden" name="checked_dates" id="bulk-checked-dates-pending" value="">
+            <input type="hidden" name="next" class="bulk-next-input" value="{{ request.get_full_path }}">
+            <button type="submit" id="bulk-revoke-pending" class="reject-btn" disabled>Revoke Pending</button>
+        </form>
+        <form method="post" action="{% url 'bulk_manage_own_requests' %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="request_revoke_approved">
+            <input type="hidden" name="request_ids" id="bulk-request-ids-approved" value="">
+            <input type="hidden" name="checked_dates" id="bulk-checked-dates-approved" value="">
+            <input type="hidden" name="next" class="bulk-next-input" value="{{ request.get_full_path }}">
+            <button type="submit" id="bulk-request-revoke" class="approve-btn" disabled>Request Revoke (Approved)</button>
+        </form>
+    </div>
+
+    <form method="post" id="day-selection-form" class="request-form">
+        {% csrf_token %}
+        {{ day_form.selected_dates }}
+        <input type="hidden" name="month" id="selected-month-hidden" value="{{ month }}">
+        <input type="hidden" name="year" id="selected-year-hidden" value="{{ year }}">
+        <button type="button" id="clear-selection" class="secondary-btn">Clear Selection</button>
+        <button type="submit" id="send-request" disabled>Send Request</button>
+    </form>
+
+    <section class="panel stacked-panel">
+        <h2>Pending Requests</h2>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Country</th>
+                    <th>Action</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for req in pending_requests %}
+                    <tr>
+                        <td>{{ req.date }}</td>
+                        <td>{% if req.country %}{{ req.country.code }}{% else %}-{% endif %}</td>
+                        <td>
+                            <form method="post" action="{% url 'revoke_own_request' req.id %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <button type="submit" class="reject-btn tiny-btn">Revoke</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="3">No pending requests.</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>
+
+<script id="employee-request-data" type="application/json">{{ request_data_json|safe }}</script>
+<script id="employee-holiday-data" type="application/json">{{ holiday_data_json|safe }}</script>
+<script id="employee-selected-seed" type="application/json">{{ selected_dates_seed_json|safe }}</script>
+<script src="{% static 'timeoff/js/employee_calendar.js' %}"></script>
+{% endblock %}
