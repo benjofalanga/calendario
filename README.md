@@ -100,6 +100,20 @@ export CALENDARIO_PORT=8090
 docker compose up -d --build
 ```
 
+## QA Regression Test
+
+Run the automated end-to-end QA flow (request/approve/revoke/carryover):
+
+```bash
+python manage.py test timeoff.tests.test_qa_flow -v 2
+```
+
+If running in Docker:
+
+```bash
+docker compose exec web python manage.py test timeoff.tests.test_qa_flow -v 2
+```
+
 ## Role Setup
 
 - Each user gets an `EmployeeProfile` automatically.
